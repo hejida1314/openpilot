@@ -402,6 +402,8 @@ class Updater:
 def main() -> None:
   params = Params()
 
+  params.put_bool("DisableUpdates", True)
+
   if params.get_bool("DisableUpdates"):
     cloudlog.warning("updates are disabled by the DisableUpdates param")
     exit(0)
