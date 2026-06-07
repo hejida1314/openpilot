@@ -7,12 +7,14 @@ See the LICENSE.md file in the root directory for more details.
 
 from openpilot.common.params import Params
 from opendbc.car import structs
+from opendbc.car.hyundai.values import CAR
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP, HyundaiSafetyFlagsSP
 from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP
 
 
 MADS_NO_ACC_MAIN_BUTTON = ("rivian", "tesla")
+MADS_DISABLED_PLATFORMS = (CAR.KIA_CARNIVAL_HEV_4TH_GEN,)
 
 
 class MadsSteeringModeOnBrake:
@@ -30,6 +32,10 @@ def get_mads_limited_brands(CP: structs.CarParams, CP_SP: structs.CarParamsSP) -
   return False
 
 
+def mads_disabled_for_platform(CP: structs.CarParams) -> bool:
+  return CP.carFingerprint in MADS_DISABLED_PLATFORMS
+
+
 def read_steering_mode_param(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params: Params):
   if get_mads_limited_brands(CP, CP_SP):
     return MadsSteeringModeOnBrake.DISENGAGE
@@ -38,6 +44,10 @@ def read_steering_mode_param(CP: structs.CarParams, CP_SP: structs.CarParamsSP, 
 
 
 def set_alternative_experience(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params: Params):
+  if mads_disabled_for_platform(CP):
+    params.put_bool("Mads", False)
+    return
+
   enabled = params.get_bool("Mads")
   steering_mode = read_steering_mode_param(CP, CP_SP, params)
 
@@ -51,6 +61,9 @@ def set_alternative_experience(CP: structs.CarParams, CP_SP: structs.CarParamsSP
 
 
 def set_car_specific_params(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params: Params):
+  if mads_disabled_for_platform(CP):
+    params.put_bool("Mads", False)
+
   if CP.brand == "hyundai":
     # TODO-SP: This should be separated from MADS module for future implementations
     #          Use "HyundaiLongitudinalMainCruiseToggleable" param
