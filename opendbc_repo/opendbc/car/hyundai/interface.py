@@ -73,7 +73,7 @@ class CarInterface(CarInterfaceBase):
           ret.flags |= HyundaiFlags.CANFD_ALT_GEARS.value
 
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hyundaiCanfd), ]
-      if CAN.ECAN >= 4 and candidate != CAR.KIA_CARNIVAL_HEV_4TH_GEN:
+      if CAN.ECAN >= 4:
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
       ret.safetyConfigs = cfgs
 
