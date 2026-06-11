@@ -131,6 +131,7 @@ class SelfdriveD(CruiseHelper):
     self.last_functional_fan_frame = 0
     self.events_prev = []
     self.logged_comm_issue = None
+    self.logged_controls_mismatch = None
     self.not_running_prev = None
     self.experimental_mode = False
     self.personality = get_sanitize_int_param(
@@ -323,11 +324,38 @@ class SelfdriveD(CruiseHelper):
         safety_mismatch = pandaState.safetyModel != self.CP.safetyConfigs[i].safetyModel or \
                           pandaState.safetyParam != self.CP.safetyConfigs[i].safetyParam or \
                           pandaState.alternativeExperience != self.CP.alternativeExperience
+        expected_safety = {
+          'model': self.CP.safetyConfigs[i].safetyModel.raw,
+          'param': self.CP.safetyConfigs[i].safetyParam,
+          'alternativeExperience': self.CP.alternativeExperience,
+        }
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
+        expected_safety = {'model': 'ignored', 'param': 0, 'alternativeExperience': self.CP.alternativeExperience}
 
       # safety mismatch allows some time for pandad to set the safety mode and publish it back from panda
       if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
+        mismatch_log = {
+          'panda': i,
+          'pandas': len(self.sm['pandaStates']),
+          'configs': len(self.CP.safetyConfigs),
+          'safetyMismatch': safety_mismatch,
+          'safetyRxChecksInvalid': pandaState.safetyRxChecksInvalid,
+          'mismatchCounter': self.mismatch_counter,
+          'expected': expected_safety,
+          'actual': {
+            'model': pandaState.safetyModel.raw,
+            'param': pandaState.safetyParam,
+            'alternativeExperience': pandaState.alternativeExperience,
+            'controlsAllowed': pandaState.controlsAllowed,
+            'controlsAllowedLateral': pandaState.controlsAllowedLateral,
+            'controlsAllowedLongitudinal': pandaState.controlsAllowedLongitudinal,
+            'faults': [f.raw for f in pandaState.faults],
+          },
+        }
+        if mismatch_log != self.logged_controls_mismatch:
+          cloudlog.event("controlsMismatch.detail", error=True, **mismatch_log)
+          self.logged_controls_mismatch = mismatch_log
         self.events.add(EventName.controlsMismatch)
 
       if log.PandaState.FaultType.relayMalfunction in pandaState.faults:
