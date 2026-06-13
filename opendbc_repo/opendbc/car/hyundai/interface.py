@@ -39,6 +39,9 @@ class CarInterface(CarInterfaceBase):
       # "LFA steering" if camera directly sends LFA to the MDPS
       cam_can = CanBus(None, fingerprint).CAM
       lka_steering = 0x50 in fingerprint[cam_can] or 0x110 in fingerprint[cam_can]
+      if candidate == CAR.KIA_CARNIVAL_HEV_4TH_GEN:
+        # The US 2025 Carnival HEV fingerprints 0x110, but stock safety liveness is on the LFA path.
+        lka_steering = False
       CAN = CanBus(None, fingerprint, lka_steering)
 
       ret.alphaLongitudinalAvailable = not (ret.flags & HyundaiFlags.CANFD_NO_RADAR_DISABLE)
