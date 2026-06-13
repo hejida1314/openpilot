@@ -18,8 +18,6 @@ class CanBus(CanBusBase):
     self._a, self._e = 1, 0
     if lka_steering:
       self._a, self._e = 0, 1
-    elif CP is not None and CP.flags & HyundaiFlags.CANFD_LFA_STEER_BUS1:
-      self._a, self._e = 0, 1
 
     self._a += self.offset
     self._e += self.offset
@@ -76,14 +74,15 @@ def create_suppress_lfa(packer, CAN, lfa_block_msg, lka_steering_alt):
 
 
 def create_buttons(packer, CP, CAN, cnt, btn):
-  canfd_msg = "CRUISE_BUTTONS_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS else "CRUISE_BUTTONS"
+  lka_steering = CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG
+  canfd_msg = "CRUISE_BUTTONS_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS and not lka_steering else "CRUISE_BUTTONS"
   values = {
     "COUNTER": cnt,
     "SET_ME_1": 1,
     "CRUISE_BUTTONS": btn,
-  } | ({"SET_ME_2": 6} if CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS else {})
+  } | ({"SET_ME_2": 6} if canfd_msg == "CRUISE_BUTTONS_ALT" else {})
 
-  bus = CAN.ECAN if CP.flags & (HyundaiFlags.CANFD_LKA_STEER_MSG | HyundaiFlags.CANFD_LFA_STEER_BUS1) else CAN.CAM
+  bus = CAN.ECAN if lka_steering else CAN.CAM
   return packer.make_can_msg(canfd_msg, bus, values)
 
 

@@ -60,7 +60,6 @@
 
 static bool hyundai_canfd_alt_buttons = false;
 static bool hyundai_canfd_lka_steer_msg_alt = false;
-static bool hyundai_canfd_lfa_steer_bus1 = false;
 
 static unsigned int hyundai_canfd_get_lka_addr(void) {
   return hyundai_canfd_lka_steer_msg_alt ? 0x110U : 0x50U;
@@ -85,10 +84,8 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *msg) {
 
   const unsigned pt_bus = hyundai_canfd_lka_steer_msg ? 1U : 0U;
   const unsigned int scc_bus = hyundai_camera_scc ? 2U : pt_bus;
-  const unsigned active_pt_bus = hyundai_canfd_lfa_steer_bus1 ? 1U : pt_bus;
-  const unsigned active_scc_bus = hyundai_canfd_lfa_steer_bus1 ? 1U : scc_bus;
 
-  if (msg->bus == active_pt_bus) {
+  if (msg->bus == pt_bus) {
     // driver torque
     if (msg->addr == 0xeaU) {
       int torque_driver_new = ((msg->data[11] & 0x1fU) << 8U) | msg->data[10];
@@ -97,7 +94,7 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *msg) {
     }
 
     // cruise buttons
-    const unsigned int button_addr = hyundai_canfd_alt_buttons ? 0x1aaU : 0x1cfU;
+    const unsigned int button_addr = (hyundai_canfd_alt_buttons && !hyundai_canfd_lka_steer_msg) ? 0x1aaU : 0x1cfU;
     if (msg->addr == button_addr) {
       bool main_button = false;
       int cruise_button = 0;
@@ -142,7 +139,7 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *msg) {
     }
   }
 
-  if (msg->bus == active_scc_bus) {
+  if (msg->bus == scc_bus) {
     // cruise state
     if ((msg->addr == 0x1a0U) && !hyundai_longitudinal) {
       // 1=enabled, 2=driver override
@@ -188,7 +185,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
   }
 
   // cruise buttons check
-  const unsigned int tx_button_addr = hyundai_canfd_alt_buttons ? 0x1aaU : 0x1cfU;
+  const unsigned int tx_button_addr = (hyundai_canfd_alt_buttons && !hyundai_canfd_lka_steer_msg) ? 0x1aaU : 0x1cfU;
   if (msg->addr == tx_button_addr) {
     int button = 0;
     if (msg->addr == 0x1cfU) {
@@ -249,7 +246,6 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
 static safety_config hyundai_canfd_init(uint16_t param) {
   const uint16_t HYUNDAI_PARAM_CANFD_LKA_STEER_MSG_ALT = 128;
   const uint16_t HYUNDAI_PARAM_CANFD_ALT_BUTTONS = 32;
-  const uint16_t HYUNDAI_PARAM_CANFD_LFA_STEER_BUS1 = 1024;
 
   static const CanMsg HYUNDAI_CANFD_LKA_STEER_MSG_TX_MSGS[] = {
     HYUNDAI_CANFD_LKA_STEER_MSG_COMMON_TX_MSGS(0, 1)
@@ -307,7 +303,6 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   gen_crc_lookup_table_16(0x1021, hyundai_canfd_crc_lut);
   hyundai_canfd_alt_buttons = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ALT_BUTTONS);
   hyundai_canfd_lka_steer_msg_alt = GET_FLAG(param, HYUNDAI_PARAM_CANFD_LKA_STEER_MSG_ALT);
-  hyundai_canfd_lfa_steer_bus1 = GET_FLAG(param, HYUNDAI_PARAM_CANFD_LFA_STEER_BUS1);
 
   safety_config ret;
   if (hyundai_longitudinal) {
@@ -316,15 +311,7 @@ static safety_config hyundai_canfd_init(uint16_t param) {
         HYUNDAI_CANFD_STD_BUTTONS_RX_CHECKS(1)
       };
 
-      static RxCheck hyundai_canfd_lka_steer_msg_alt_buttons_long_rx_checks[] = {
-        HYUNDAI_CANFD_ALT_BUTTONS_RX_CHECKS(1)
-      };
-
-      if (hyundai_canfd_alt_buttons) {
-        ret = BUILD_SAFETY_CFG(hyundai_canfd_lka_steer_msg_alt_buttons_long_rx_checks, HYUNDAI_CANFD_LKA_STEER_MSG_LONG_TX_MSGS);
-      } else {
-        ret = BUILD_SAFETY_CFG(hyundai_canfd_lka_steer_msg_long_rx_checks, HYUNDAI_CANFD_LKA_STEER_MSG_LONG_TX_MSGS);
-      }
+      ret = BUILD_SAFETY_CFG(hyundai_canfd_lka_steer_msg_long_rx_checks, HYUNDAI_CANFD_LKA_STEER_MSG_LONG_TX_MSGS);
 
     } else {
       // Longitudinal checks for LFA steering
@@ -357,51 +344,19 @@ static safety_config hyundai_canfd_init(uint16_t param) {
     if (hyundai_canfd_lka_steer_msg) {
       // *** LKA steering checks ***
       // E-CAN is on bus 1, SCC messages are sent on cars with ADRV ECU.
+      // Match the pre-alt-buttons LKA steering behavior used by the working Carnival HEV branch.
       static RxCheck hyundai_canfd_lka_steer_msg_rx_checks[] = {
         HYUNDAI_CANFD_STD_BUTTONS_RX_CHECKS(1)
         HYUNDAI_CANFD_SCC_ADDR_CHECK(1)
       };
 
-      static RxCheck hyundai_canfd_lka_steer_msg_alt_buttons_rx_checks[] = {
-        HYUNDAI_CANFD_ALT_BUTTONS_RX_CHECKS(1)
-        HYUNDAI_CANFD_SCC_ADDR_CHECK(1)
-      };
+      SET_RX_CHECKS(hyundai_canfd_lka_steer_msg_rx_checks, ret);
 
-      if (hyundai_canfd_alt_buttons) {
-        SET_RX_CHECKS(hyundai_canfd_lka_steer_msg_alt_buttons_rx_checks, ret);
+      if (hyundai_canfd_lka_steer_msg_alt) {
+        SET_TX_MSGS(HYUNDAI_CANFD_LKA_STEER_MSG_ALT_TX_MSGS, ret);
       } else {
-        SET_RX_CHECKS(hyundai_canfd_lka_steer_msg_rx_checks, ret);
+        SET_TX_MSGS(HYUNDAI_CANFD_LKA_STEER_MSG_TX_MSGS, ret);
       }
-
-      if (hyundai_canfd_alt_buttons) {
-        if (hyundai_canfd_lka_steer_msg_alt) {
-          SET_TX_MSGS(HYUNDAI_CANFD_LKA_STEER_MSG_ALT_ALT_BUTTONS_TX_MSGS, ret);
-        } else {
-          SET_TX_MSGS(HYUNDAI_CANFD_LKA_STEER_MSG_ALT_BUTTONS_TX_MSGS, ret);
-        }
-      } else {
-        if (hyundai_canfd_lka_steer_msg_alt) {
-          SET_TX_MSGS(HYUNDAI_CANFD_LKA_STEER_MSG_ALT_TX_MSGS, ret);
-        } else {
-          SET_TX_MSGS(HYUNDAI_CANFD_LKA_STEER_MSG_TX_MSGS, ret);
-        }
-      }
-
-    } else if (hyundai_canfd_lfa_steer_bus1) {
-      // 2025 Kia Carnival HEV US: stock SCC remains authoritative, but the
-      // SCC_CONTROL cadence differs from the generic CAN-FD LFA profile.
-      static RxCheck hyundai_canfd_lfa_steer_bus1_rx_checks[] = {
-        HYUNDAI_CANFD_ALT_BUTTONS_RX_CHECKS(1)
-      };
-
-      static const CanMsg HYUNDAI_CANFD_LFA_STEER_BUS1_TX_MSGS[] = {
-        HYUNDAI_CANFD_CRUISE_BUTTON_ALT_TX_MSGS(1)
-        HYUNDAI_CANFD_LFA_STEERING_COMMON_TX_MSGS(1)
-        HYUNDAI_CANFD_SCC_CONTROL_COMMON_TX_MSGS(1, false)
-      };
-
-      SET_RX_CHECKS(hyundai_canfd_lfa_steer_bus1_rx_checks, ret);
-      SET_TX_MSGS(HYUNDAI_CANFD_LFA_STEER_BUS1_TX_MSGS, ret);
 
     } else if (!hyundai_camera_scc) {
       // Radar sends SCC messages on these cars instead of camera
