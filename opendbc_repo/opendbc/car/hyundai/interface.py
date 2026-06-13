@@ -40,7 +40,7 @@ class CarInterface(CarInterfaceBase):
       cam_can = CanBus(None, fingerprint).CAM
       lka_steering = 0x50 in fingerprint[cam_can] or 0x110 in fingerprint[cam_can]
       if candidate == CAR.KIA_CARNIVAL_HEV_4TH_GEN:
-        # The US 2025 Carnival HEV fingerprints 0x110, but stock safety liveness is on the LFA path.
+        # The US 2025 Carnival HEV has LFA/SCC/button liveness on E-CAN bus 1.
         lka_steering = False
       CAN = CanBus(None, fingerprint, lka_steering)
 
@@ -60,6 +60,8 @@ class CarInterface(CarInterfaceBase):
         ret.flags |= HyundaiFlags.CANFD_LKA_STEER_MSG.value
         if 0x110 in fingerprint[CAN.CAM]:
           ret.flags |= HyundaiFlags.CANFD_LKA_STEER_MSG_ALT.value
+      elif candidate == CAR.KIA_CARNIVAL_HEV_4TH_GEN:
+        ret.flags |= HyundaiFlags.CANFD_LFA_STEER_BUS1.value
       else:
         # no LKA steering
         if 0x1cf not in fingerprint[CAN.ECAN]:
@@ -88,6 +90,8 @@ class CarInterface(CarInterfaceBase):
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_ALT_BUTTONS.value
       if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CAMERA_SCC.value
+      if ret.flags & HyundaiFlags.CANFD_LFA_STEER_BUS1:
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_LFA_STEER_BUS1.value
 
     else:
       # Shared configuration for non CAN-FD cars

@@ -18,6 +18,8 @@ class CanBus(CanBusBase):
     self._a, self._e = 1, 0
     if lka_steering:
       self._a, self._e = 0, 1
+    elif CP is not None and CP.flags & HyundaiFlags.CANFD_LFA_STEER_BUS1:
+      self._a, self._e = 0, 1
 
     self._a += self.offset
     self._e += self.offset
@@ -81,7 +83,7 @@ def create_buttons(packer, CP, CAN, cnt, btn):
     "CRUISE_BUTTONS": btn,
   } | ({"SET_ME_2": 6} if CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS else {})
 
-  bus = CAN.ECAN if CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG else CAN.CAM
+  bus = CAN.ECAN if CP.flags & (HyundaiFlags.CANFD_LKA_STEER_MSG | HyundaiFlags.CANFD_LFA_STEER_BUS1) else CAN.CAM
   return packer.make_can_msg(canfd_msg, bus, values)
 
 
