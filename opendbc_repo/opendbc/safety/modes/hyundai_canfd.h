@@ -388,9 +388,10 @@ static safety_config hyundai_canfd_init(uint16_t param) {
       }
 
     } else if (hyundai_canfd_lfa_steer_bus1) {
+      // 2025 Kia Carnival HEV US: stock SCC remains authoritative, but the
+      // SCC_CONTROL cadence differs from the generic CAN-FD LFA profile.
       static RxCheck hyundai_canfd_lfa_steer_bus1_rx_checks[] = {
         HYUNDAI_CANFD_ALT_BUTTONS_RX_CHECKS(1)
-        HYUNDAI_CANFD_SCC_ADDR_CHECK(1)
       };
 
       static const CanMsg HYUNDAI_CANFD_LFA_STEER_BUS1_TX_MSGS[] = {

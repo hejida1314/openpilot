@@ -111,6 +111,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
     self.CS: CarStateBase = self.CarState(CP, CP_SP)
     self.can_parsers: dict[StrEnum, CANParser] = self.CS.get_can_parsers(CP, CP_SP)
+    self._last_can_invalid_log = 0.0
 
     dbc_names = {bus: cp.dbc_name for bus, cp in self.can_parsers.items()}
     self.CC: CarControllerBase = self.CarController(dbc_names, CP, CP_SP)
@@ -278,6 +279,31 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
     ret.canValid = all(cp.can_valid for cp in self.can_parsers.values())
     ret.canTimeout = any(cp.bus_timeout for cp in self.can_parsers.values())
+    if not ret.canValid:
+      now = time.monotonic()
+      if now - self._last_can_invalid_log > 2.0:
+        self._last_can_invalid_log = now
+        invalid = {}
+        for bus_name, cp in self.can_parsers.items():
+          bus_timeout = cp.bus_timeout
+          invalid_msgs = []
+          for state in cp.message_states.values():
+            missing_or_timeout = not state.valid(cp._last_update_nanos, bus_timeout)
+            counter_invalid = state.counter_fail >= 5
+            if missing_or_timeout or counter_invalid:
+              age_ms = None
+              if state.timestamps:
+                age_ms = round((cp._last_update_nanos - state.timestamps[-1]) / 1e6, 1)
+              invalid_msgs.append({
+                "addr": hex(state.address),
+                "name": state.name,
+                "seen": bool(state.timestamps),
+                "age_ms": age_ms,
+                "counter_fail": state.counter_fail,
+              })
+          if invalid_msgs:
+            invalid[str(bus_name)] = {"bus": cp.bus, "msgs": invalid_msgs}
+        carlog.warning(f"CAN parser invalid: {invalid}")
 
     if ret.vEgoCluster == 0.0 and not self.v_ego_cluster_seen:
       ret.vEgoCluster = ret.vEgo
