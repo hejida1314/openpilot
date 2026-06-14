@@ -405,6 +405,9 @@ def main() -> None:
   params.put_bool("DisableUpdates", True)
 
   if params.get_bool("DisableUpdates"):
+    params.put_bool("UpdateAvailable", False)
+    params.put_bool("UpdaterFetchAvailable", False)
+    shutil.rmtree(STAGING_ROOT, ignore_errors=True)
     cloudlog.warning("updates are disabled by the DisableUpdates param")
     exit(0)
 
